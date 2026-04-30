@@ -14,3 +14,6 @@ dist/
 # Sistema
 .DS_Store
 Thumbs.db
+
+uploads/
+**/uploads/

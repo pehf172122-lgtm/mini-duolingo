@@ -10,7 +10,8 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     res.status(201).json({
       success: true,
       message: 'User registered',
-      data: result
+      data: result,
+      error: null
     });
   } catch (err) {
     next(err);
@@ -23,10 +24,22 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
     const result = await authService.login(emailOrUsername, password);
 
+    const { accessToken, refreshToken } = result as any;
+
+    // set httpOnly secure cookie for refresh token
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/api/v1/auth'
+    });
+
     res.json({
       success: true,
       message: 'Login successful',
-      data: result
+      data: { accessToken },
+      error: null
     });
   } catch (err) {
     next(err);
@@ -35,15 +48,24 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export async function refresh(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.body.refreshToken || (req as any).cookies?.refreshToken;
+    if (!refreshToken) {
+      return res.status(400).json({ success: false, message: 'Refresh token required', data: null, error: 'Missing refresh token' });
+    }
 
     const result = await authService.refresh(refreshToken);
+    const { accessToken, refreshToken: newRefreshToken } = result as any;
 
-    res.json({
-      success: true,
-      message: 'Token refreshed',
-      data: result
+    // rotate refresh token cookie
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/api/v1/auth'
     });
+
+    res.json({ success: true, message: 'Token refreshed', data: { accessToken }, error: null });
   } catch (err) {
     next(err);
   }
@@ -51,22 +73,16 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
 
 export async function logout(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.body.refreshToken || (req as any).cookies?.refreshToken;
 
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'Refresh token required'
-      });
+    if (refreshToken) {
+      await authService.logout(refreshToken);
     }
 
-    await authService.logout(refreshToken);
+    // clear cookie
+    res.clearCookie('refreshToken', { path: '/api/v1/auth' });
 
-    res.json({
-      success: true,
-      message: 'Logged out successfully',
-      data: null
-    });
+    res.json({ success: true, message: 'Logged out successfully', data: null, error: null });
   } catch (err) {
     next(err);
   }

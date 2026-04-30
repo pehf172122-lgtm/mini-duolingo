@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import * as contentService from '../services/content.service';
 import { createExerciseSchema } from '../validators/exercise.validator';
+import { updateLessonProgress } from '../services/progress.service';
+import pool from '../database/connection';
 
 export async function createUnit(req: Request, res: Response, next: NextFunction) {
   try {
@@ -57,7 +59,7 @@ export async function validateExercise(req: Request, res: Response, next: NextFu
     const { exerciseId } = req.params;
     const { answer } = req.body;
     if (typeof answer === 'undefined') return res.status(400).json({ success: false, message: 'answer is required', data: null, error: 'Validation' });
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({
@@ -79,7 +81,7 @@ export async function validateExercise(req: Request, res: Response, next: NextFu
 
 export async function completeLesson(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
 
     if (!userId) {
       return res.status(401).json({
@@ -146,3 +148,17 @@ export const getExercisesByLesson = async (req: Request, res: Response, next: Ne
     next(err);
   }
 };
+
+export async function getUserProgress(req: any, res: any) {
+  const userId = req.user?.userId;
+
+  const [rows]: any = await pool.execute(
+    `SELECT * FROM lesson_progress WHERE user_id = ?`,
+    [userId]
+  );
+
+  res.json({
+    success: true,
+    data: rows
+  });
+}

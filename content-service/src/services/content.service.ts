@@ -6,7 +6,19 @@ import { Exercise, ExerciseTable } from '../models/exercise.model';
 import * as vocabularyClient from '../clients/vocabulary.client';
 import { gamificationClient } from '../utils/httpClient';
 import { createError } from '../utils/error.util';
+import { updateLessonProgress } from './progress.service';
 
+
+
+// 🔥 verificar si ya respondió
+async function hasUserAnswered(userId: string, exerciseId: string) {
+  const [rows]: any = await pool.execute(
+    `SELECT id FROM user_exercises WHERE user_id = ? AND exercise_id = ? LIMIT 1`,
+    [userId, exerciseId]
+  );
+
+  return rows.length > 0;
+}
 
 export async function createUnit(data: { title: string; description?: string }) {
   const id = uuidv4();
@@ -73,24 +85,45 @@ export async function createExercise(data: {
 }
 
 
-export async function validateExerciseAnswer(exerciseId: string, answer: string, userId: string): Promise<{ correct: boolean; expected?: string }> {
-  const [rows] = await pool.execute<any[]>(`SELECT correct_answer FROM ${ExerciseTable} WHERE id = ? LIMIT 1`, [exerciseId]);
-  const row = rows[0];
-  if (!row) {
-  const error: any = new Error('Exercise not found');
-  error.status = 404;
-  throw error;
-  }
-  const expected = row.correct_answer;
-  const normalize = (text: string) =>
-  text.trim().toLowerCase();
+export async function validateExerciseAnswer(
+  exerciseId: string,
+  answer: string,
+  userId: string
+): Promise<any> {
 
+  // 🔹 buscar ejercicio (ANTES de todo)
+  const [rows]: any = await pool.execute(
+    `SELECT correct_answer, lesson_id FROM ${ExerciseTable} WHERE id = ? LIMIT 1`,
+    [exerciseId]
+  );
+
+  const row = rows[0];
+
+  if (!row) {
+    throw createError('Exercise not found', 404);
+  }
+
+  const expected = row.correct_answer;
+  const lessonId = row.lesson_id;
+
+  // 🔥 evitar doble conteo
+  const alreadyAnswered = await hasUserAnswered(userId, exerciseId);
+
+  if (alreadyAnswered) {
+    return {
+      correct: null,
+      expected,
+      message: 'Already answered'
+    };
+  }
+
+  // 🔹 normalización
   const normalizedAnswer = String(answer).trim().toLowerCase();
   const normalizedExpected = String(expected).trim().toLowerCase();
 
   let correct = normalizedAnswer === normalizedExpected;
 
-// 🔥 NUEVA LÓGICA: VALIDACIÓN CON VOCABULARY
+  // 🔥 fallback con vocabulary-service
   if (!correct) {
     try {
       const wordData = await vocabularyClient.searchWord(expected);
@@ -103,26 +136,45 @@ export async function validateExerciseAnswer(exerciseId: string, answer: string,
         );
 
         if (isValid) {
-        correct = true;
+          correct = true;
         }
       }
     } catch (error) {
-    console.error('Error calling vocabulary-service:', error);
+      console.error('Vocabulary error:', error);
+    }
   }
-}
 
-if (correct) {
-  try {
-    await gamificationClient.post('/api/v1/gamification/action', {
-      userId, // ⚠️ luego lo sacamos del JWT
-      actionType: 'EXERCISE_CORRECT'
-    });
-  } catch (error: any) {
-    console.error('Gamification service error:', error?.message);
+  // 🔥 guardar intento (SIEMPRE)
+  await pool.execute(
+    `INSERT INTO user_exercises (user_id, exercise_id, is_correct)
+     VALUES (?, ?, ?)`,
+    [userId, exerciseId, correct]
+  );
+
+  // 🔥 actualizar progreso (SIEMPRE)
+  let progress = null;
+
+  if (lessonId) {
+    progress = await updateLessonProgress(userId, lessonId, correct);
   }
-}
 
-return { correct, expected };
+  // 🎮 gamificación SOLO si es correcto
+  if (correct) {
+    try {
+      await gamificationClient.post('/api/v1/gamification/action', {
+        userId,
+        actionType: 'EXERCISE_CORRECT'
+      });
+    } catch (error: any) {
+      console.error('Gamification error:', error?.message);
+    }
+  }
+
+  return {
+    correct,
+    expected,
+    progress
+  };
 }
 
 export async function completeLesson(userId: string) {

@@ -11,6 +11,7 @@ router.get('/units', controller.getUnits);
 router.post('/lessons', controller.createLesson);
 router.get('/units/:unitId/lessons', controller.getLessonsByUnit);
 router.get('/lessons/:lessonId/exercises', controller.getExercisesByLesson);
+router.get('/progress', controller.getUserProgress);
 
 // Exercises
 router.post('/exercises', controller.createExercise);

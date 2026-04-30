@@ -100,12 +100,26 @@ export async function refresh(refreshToken: string) {
     throw { status: 403, message: 'User disabled' };
   }
 
+  // generate new tokens (rotation)
   const newAccessToken = signJwt({
     userId: user.user_id,
     email: user.email
   });
 
-  return { accessToken: newAccessToken };
+  const newRefreshToken = signRefreshToken({ userId: user.user_id });
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  try {
+    // revoke old token and store new one
+    await refreshRepo.revokeToken(refreshToken);
+    await refreshRepo.createRefreshToken(user.user_id, newRefreshToken, expiresAt);
+  } catch (e) {
+    // if DB update fails, do not leak details
+    throw { status: 500, message: 'Failed to rotate refresh token' };
+  }
+
+  return { accessToken: newAccessToken, refreshToken: newRefreshToken };
 }
 
 export async function logout(refreshToken: string) {

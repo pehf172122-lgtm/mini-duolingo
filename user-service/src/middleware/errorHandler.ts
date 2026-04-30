@@ -1,12 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
 
-export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
+export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction) {
+  // Log interno completo (no enviado al cliente)
   console.error(err);
 
-  res.status(err.status || 500).json({
+  const status = err.status || 500;
+  const message = err.message || 'Internal server error';
+  const errorMessage = status === 500 ? 'Internal Server Error' : message;
+
+  res.status(status).json({
     success: false,
-    message: err.message || 'Internal server error',
+    message,
     data: null,
-    error: err
+    error: errorMessage
   });
 }

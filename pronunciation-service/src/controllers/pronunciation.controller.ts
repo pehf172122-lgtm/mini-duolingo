@@ -4,6 +4,7 @@ import { evaluateSchema, evaluateAudioSchema } from '../validators/pronunciation
 import AppError from '../utils/AppError';
 import fs from 'fs';
 import OpenAI from 'openai';
+import { sendUserAction } from '../utils/gamificationClient';
 
 
 const openai = new OpenAI({
@@ -12,10 +13,13 @@ const openai = new OpenAI({
 
 export const evaluateAudio = async (req: any, res: any, next: any) => {
   try {
-    const userId = req.headers['x-user-id']; // viene del JWT
+    const userId = req.headers['x-user-id'] as string;
+    const token = req.headers.authorization?.split(' ')[1];
+
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
+
     const { word, expectedText } = req.body;
 
     if (!req.file) {
@@ -25,7 +29,6 @@ export const evaluateAudio = async (req: any, res: any, next: any) => {
     let transcribedText = '';
 
     try {
-      // 🎤 INTENTO REAL CON WHISPER
       const transcription = await openai.audio.transcriptions.create({
         file: fs.createReadStream(req.file.path),
         model: 'whisper-1',
@@ -33,32 +36,25 @@ export const evaluateAudio = async (req: any, res: any, next: any) => {
 
       transcribedText = transcription.text;
 
-      console.log('🎤 Whisper transcription:', transcribedText);
-
     } catch (error: any) {
-      console.warn('⚠️ Whisper failed, using fallback mock:', error.message);
+      console.warn('⚠️ Whisper fallback:', error.message);
 
-      // 🔥 FALLBACK AUTOMÁTICO (NO SE ROMPE EL SISTEMA)
-      const fakeTranscriptions = [
-        "hello",
-        "helo",
-        "hallo",
-        "yellow"
-      ];
-
-      transcribedText =
-        fakeTranscriptions[Math.floor(Math.random() * fakeTranscriptions.length)];
+      const fakeTranscriptions = ["hello", "helo", "hallo", "yellow"];
+      transcribedText = fakeTranscriptions[Math.floor(Math.random() * fakeTranscriptions.length)];
     }
 
-    // 🧠 Evaluación
     const result = await pronunciationService.evaluatePronunciation({
-      userId: String(userId),
+      userId,
       word,
       expectedText,
       transcribedText
     });
 
-    // 🧹 BORRAR ARCHIVO (MUY IMPORTANTE)
+    // 🎮 gamification
+    if (token) {
+      await sendUserAction(token, userId, 'PRONUNCIATION_PRACTICE');
+    }
+
     fs.unlinkSync(req.file.path);
 
     res.json({
@@ -78,18 +74,23 @@ export async function evaluate(req: Request, res: Response, next: NextFunction) 
     const parsed = evaluateSchema.safeParse(req.body);
 
    if (!parsed.success) {
-   return next(new AppError(parsed.error.issues[0].message, 400));
+    return next(new AppError(parsed.error.issues[0].message, 400));
    }
 
     const userId = req.user?.userId;
 
     if (!userId) {
-  return next(new AppError('Unauthorized', 401));
+      return next(new AppError('Unauthorized', 401));
     }
 
     const { word, expectedText, transcribedText } = parsed.data;
 
     const result = await pronunciationService.evaluatePronunciation({ userId, word, expectedText, transcribedText });
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (token) {
+      await sendUserAction(token, userId, 'PRONUNCIATION_PRACTICE');
+    }
     return res.status(201).json({ success: true, message: 'Evaluation created', data: result });
   } catch (err) {
     return next(err);
