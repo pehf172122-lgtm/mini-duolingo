@@ -100,12 +100,26 @@ export async function refresh(refreshToken: string) {
     throw { status: 403, message: 'User disabled' };
   }
 
+  // generate new tokens (rotation)
   const newAccessToken = signJwt({
     userId: user.user_id,
     email: user.email
   });
 
-  return { accessToken: newAccessToken };
+  const newRefreshToken = signRefreshToken({ userId: user.user_id });
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  try {
+    // revoke old token and store new one
+    await refreshRepo.revokeToken(refreshToken);
+    await refreshRepo.createRefreshToken(user.user_id, newRefreshToken, expiresAt);
+  } catch (e) {
+    // if DB update fails, do not leak details
+    throw { status: 500, message: 'Failed to rotate refresh token' };
+  }
+
+  return { accessToken: newAccessToken, refreshToken: newRefreshToken };
 }
 
 export async function logout(refreshToken: string) {
@@ -124,4 +138,17 @@ export async function logout(refreshToken: string) {
 
 export async function logoutAll(userId: string) {
   await refreshRepo.revokeAllUserTokens(userId);
+}
+
+export async function resetPassword(email: string, newPassword: string) {
+  const normalized = email.trim().toLowerCase();
+
+  const user = await userRepo.findByEmail(normalized);
+  if (!user) throw { status: 404, message: 'User not found' };
+
+  const password_hash = await hashPassword(newPassword);
+
+  await userRepo.updatePassword(user.user_id, password_hash);
+
+  return { userId: user.user_id };
 }

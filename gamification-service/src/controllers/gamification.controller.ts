@@ -70,7 +70,8 @@ export async function getAchievements(req: Request, res: Response, next: NextFun
 
 export async function processAction(req: Request, res: Response, next: NextFunction) {
   try {
-    const { userId, actionType } = req.body;
+    const userId = (req as any).user?.userId;
+    const { actionType } = req.body;
 
     if (typeof userId !== 'string' || typeof actionType !== 'string') {
       return next(new AppError('Invalid body', 400));

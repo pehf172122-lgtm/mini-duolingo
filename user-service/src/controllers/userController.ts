@@ -18,7 +18,8 @@ export async function getMe(req: RequestWithUser, res: Response, next: NextFunct
     res.json({
       success: true,
       message: 'User fetched',
-      data: result
+      data: result,
+      error: null
     });
   } catch (err) {
     next(err);
@@ -31,10 +32,11 @@ export async function updateUser(req: RequestWithUser, res: Response, next: Next
     const fields = req.body;
 
     await userService.updateUser(userId, fields);
-
     res.json({
       success: true,
-      message: 'User updated successfully'
+      message: 'User updated successfully',
+      data: null,
+      error: null
     });
   } catch (err) {
     next(err);
@@ -46,10 +48,11 @@ export async function deleteUser(req: RequestWithUser, res: Response, next: Next
     const userId = req.userId!;
 
     await userService.removeUser(userId);
-
     res.json({
       success: true,
-      message: 'User deleted successfully'
+      message: 'User deleted successfully',
+      data: null,
+      error: null
     });
   } catch (err) {
     next(err);
@@ -60,10 +63,11 @@ export async function getProfile(req: RequestWithUser, res: Response, next: Next
   try {
     const userId = req.userId!;
     const profile = await userService.getProfile(userId);
-
     res.json({
       success: true,
-      data: profile
+      message: 'Profile fetched',
+      data: profile,
+      error: null
     });
   } catch (err) {
     next(err);
@@ -75,10 +79,11 @@ export async function updateProfile(req: RequestWithUser, res: Response, next: N
     const userId = req.userId!;
 
     await userService.updateProfile(userId, req.body);
-
     res.json({
       success: true,
-      message: 'Profile updated'
+      message: 'Profile updated',
+      data: null,
+      error: null
     });
   } catch (err) {
     next(err);
@@ -89,10 +94,11 @@ export async function getStreak(req: RequestWithUser, res: Response, next: NextF
   try {
     const userId = req.userId!;
     const streak = await userService.getStreak(userId);
-
     res.json({
       success: true,
-      data: streak
+      message: 'Streak fetched',
+      data: streak,
+      error: null
     });
   } catch (err) {
     next(err);

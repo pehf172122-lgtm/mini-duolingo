@@ -5,6 +5,7 @@ export interface Evaluation {
   expectedText: string;
   transcribedText: string;
   score: number;
+  audioPath?: string | null;
   feedback: string;
   createdAt?: string;
 }

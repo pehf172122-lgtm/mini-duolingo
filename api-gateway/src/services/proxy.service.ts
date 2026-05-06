@@ -14,33 +14,41 @@ export function createServiceProxy(target: string, name = 'service', opts: Parti
     },
     onProxyReq(proxyReq, req: Request, res: Response) {
       try {
-        console.log(`[proxy] -> ${name} : ${req.method} ${req.originalUrl} -> ${target}${req.originalUrl}`);
+        console.log(`[proxy] -> ${name} : ${req.method} ${req.originalUrl}`);
+        console.log('[proxy] headers:', req.headers);
 
-      // 🔐 Forward user from JWT
+         // 🔐 Forward userId
         if (req.user?.userId) {
           proxyReq.setHeader('x-user-id', req.user.userId);
         }
-        
-        // 🔥 FIX CLAVE: reenviar body si existe
-        const contentType = req.headers['content-type'] || '';
 
-        // 🔥 SOLO aplicar para JSON
-        if (req.body && Object.keys(req.body).length) {
+          // 🔐 Forward token
+        if (req.headers.authorization) {
+          proxyReq.setHeader('authorization', req.headers.authorization);
+        }
+          // Forward cookies (refresh token cookie)
+          if (req.headers.cookie) {
+            proxyReq.setHeader('cookie', req.headers.cookie as string);
+          }
+
+        // Forward JSON body when express.json() has already parsed it
+        try {
+          const contentType = (req.headers['content-type'] || '') as string;
+          if (req.body !== undefined && proxyReq.write && contentType.includes('application/json')) {
             const bodyData = JSON.stringify(req.body);
             proxyReq.setHeader('Content-Type', 'application/json');
             proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
             proxyReq.write(bodyData);
-        }
-        
-        if (req.user) {
-          proxyReq.setHeader('x-user-id', req.user.userId);
+            try { proxyReq.end(); } catch (_) { /* ignore if already ended */ }
+          }
+        } catch (e) {
+          // ignore body forward errors
         }
 
-        
       } catch (e) {
-          console.error('ProxyReq error:', e);
-        }
-    },
+        console.error('ProxyReq error:', e);
+      }
+    },  
     onProxyRes(proxyRes, req: Request, res: Response) {
       // eslint-disable-next-line no-console
       console.log(`[proxy] <- ${name} : ${req.method} ${req.originalUrl} <= ${proxyRes.statusCode}`);

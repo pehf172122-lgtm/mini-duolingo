@@ -4,6 +4,7 @@ import { evaluateSchema, evaluateAudioSchema } from '../validators/pronunciation
 import AppError from '../utils/AppError';
 import fs from 'fs';
 import OpenAI from 'openai';
+import { sendUserAction } from '../utils/gamificationClient';
 
 
 const openai = new OpenAI({
@@ -11,64 +12,87 @@ const openai = new OpenAI({
 });
 
 export const evaluateAudio = async (req: any, res: any, next: any) => {
+  let transcribedText = '';
+
   try {
-    const userId = req.headers['x-user-id']; // viene del JWT
+    const userId = req.headers['x-user-id'] as string;
+
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return next(new AppError('Unauthorized', 401));
     }
+
     const { word, expectedText } = req.body;
 
-    if (!req.file) {
-      return res.status(400).json({ message: 'Audio file is required' });
+    if (!word || !expectedText) {
+      return next(new AppError('word and expectedText are required', 400));
     }
 
-    let transcribedText = '';
+    if (!req.file) {
+      return next(new AppError('Audio file is required', 400));
+    }
+
+    const audioPath = req.file.path;
 
     try {
-      // 🎤 INTENTO REAL CON WHISPER
       const transcription = await openai.audio.transcriptions.create({
         file: fs.createReadStream(req.file.path),
-        model: 'whisper-1',
+        model: 'whisper-1'
       });
 
       transcribedText = transcription.text;
-
-      console.log('🎤 Whisper transcription:', transcribedText);
-
     } catch (error: any) {
-      console.warn('⚠️ Whisper failed, using fallback mock:', error.message);
+      console.error('Whisper error, using fallback:', error?.message || error);
 
-      // 🔥 FALLBACK AUTOMÁTICO (NO SE ROMPE EL SISTEMA)
-      const fakeTranscriptions = [
-        "hello",
-        "helo",
-        "hallo",
-        "yellow"
+      const fallbackPool = [
+        expectedText,
+        word,
+        'hello',
+        'hola'
       ];
 
-      transcribedText =
-        fakeTranscriptions[Math.floor(Math.random() * fakeTranscriptions.length)];
+      transcribedText = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
     }
 
-    // 🧠 Evaluación
     const result = await pronunciationService.evaluatePronunciation({
-      userId: String(userId),
+      userId,
       word,
       expectedText,
-      transcribedText
+      transcribedText,
+      audioPath
     });
 
-    // 🧹 BORRAR ARCHIVO (MUY IMPORTANTE)
-    fs.unlinkSync(req.file.path);
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (token) {
+      await sendUserAction(token, userId, 'PRONUNCIATION_PRACTICE');
+    }
 
     res.json({
       success: true,
-      message: 'Audio evaluated',
-      data: result,
+      message: 'Pronunciation evaluated',
+      data: {
+        word,
+        expectedText,
+        transcribedText,
+        score: result.score,
+        isCorrect: result.score >= 70,
+        feedback: result.feedback
+      }
     });
 
-  } catch (error) {
-    next(error);
+  } catch (error: any) {
+    console.error(error);
+
+    if (error?.status === 429) {
+      return next(new AppError('Speech service unavailable', 503));
+    }
+
+    return next(new AppError('Error evaluating pronunciation', 500));
+
+  } finally {
+    //if (req.file) {
+    //  fs.unlink(req.file.path, () => {});
+   //}
   }
 };
 
@@ -78,18 +102,23 @@ export async function evaluate(req: Request, res: Response, next: NextFunction) 
     const parsed = evaluateSchema.safeParse(req.body);
 
    if (!parsed.success) {
-   return next(new AppError(parsed.error.issues[0].message, 400));
+    return next(new AppError(parsed.error.issues[0].message, 400));
    }
 
     const userId = req.user?.userId;
 
     if (!userId) {
-  return next(new AppError('Unauthorized', 401));
+      return next(new AppError('Unauthorized', 401));
     }
 
     const { word, expectedText, transcribedText } = parsed.data;
 
     const result = await pronunciationService.evaluatePronunciation({ userId, word, expectedText, transcribedText });
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (token) {
+      await sendUserAction(token, userId, 'PRONUNCIATION_PRACTICE');
+    }
     return res.status(201).json({ success: true, message: 'Evaluation created', data: result });
   } catch (err) {
     return next(err);

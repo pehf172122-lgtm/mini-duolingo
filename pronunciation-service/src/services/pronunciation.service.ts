@@ -109,15 +109,17 @@ export async function evaluatePronunciation(input: {
   word: string;
   expectedText: string;
   transcribedText: string;
+  audioPath?: string;
 }): Promise<Evaluation> {
   try {
-    const { userId, word, expectedText, transcribedText } = input;
+    const { userId, word, expectedText, transcribedText, audioPath } = input;
     const score = computeScore(expectedText, transcribedText);
     const feedback = generateDetailedFeedback(expectedText, transcribedText, score);
 
     const [res] = await pool.execute<ResultSetHeader>(
-      `INSERT INTO ${EvaluationTable} (userId, word, expectedText, transcribedText, score, feedback, createdAt) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [userId, word, expectedText, transcribedText, score, feedback]
+      `INSERT INTO ${EvaluationTable} (userId, word, expectedText, transcribedText, score, feedback, audioPath, createdAt) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [userId, word, expectedText, transcribedText, score, feedback, audioPath || null]
     );
 
     const insertId = res.insertId as number;
@@ -130,6 +132,7 @@ export async function evaluatePronunciation(input: {
       transcribedText,
       score,
       feedback,
+      audioPath: audioPath || null,
       createdAt: new Date().toISOString()
     } as Evaluation;
   } catch (err: any) {

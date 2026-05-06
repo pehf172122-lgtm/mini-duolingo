@@ -1,0 +1,23 @@
+{
+  "name": "mini-duolingo-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "postinstall": "node scripts/copy-logo.js"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.14.1"
+  },
+  "devDependencies": {
+    "vite": "^5.1.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "typescript": "^5.1.6",
+    "@types/react": "^18.0.28",
+    "@types/react-dom": "^18.0.11"
+  }
+}

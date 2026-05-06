@@ -1,11 +1,11 @@
 import pool from '../db/pool';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 export type NewUser = { username: string; email: string; password_hash: string };
 
 export async function createUser(user: NewUser) {
-  const userId = uuidv4();
+  const userId = randomUUID();
 
   await pool.execute(
     `INSERT INTO users (user_id, username, email, password_hash, is_active, created_at)
@@ -52,4 +52,11 @@ export async function updateUser(userId: string, fields: Partial<{username:strin
 
 export async function deleteUser(userId: string){
   await pool.execute<ResultSetHeader>(`DELETE FROM users WHERE user_id = ?`, [userId]);
+}
+
+export async function updatePassword(userId: string, password_hash: string) {
+  await pool.execute<ResultSetHeader>(
+    `UPDATE users SET password_hash = ? WHERE user_id = ?`,
+    [password_hash, userId]
+  );
 }
