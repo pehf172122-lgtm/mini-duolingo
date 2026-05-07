@@ -18,10 +18,11 @@ body {
   background: linear-gradient(180deg, var(--bg) 0%, #f8fff8 100%);
   margin: 0;
   color: var(--text-dark);
+  font-size: 16px; /* Base para usar rem */
 }
 
 .container {
-  max-width: 980px;
+  max-width: 90%; /* Cambiado para ser relativo */
   margin: 24px auto;
   padding: 16px;
 }
@@ -34,6 +35,7 @@ body {
   background: var(--duo-green);
   color: var(--text-light);
   border-radius: 8px;
+  flex-wrap: wrap; /* Permite que los elementos se ajusten */
 }
 
 .brand {
@@ -78,9 +80,9 @@ nav button:hover {
 .hero {
   background: linear-gradient(90deg, #9de37a, var(--duo-green));
   color: var(--text-light);
-  padding: 24px;
+  padding: 5vw; /* Basado en el ancho de la ventana */
   border-radius: 12px;
-  font-size: 18px;
+  font-size: 1rem; /* Relativo al tamaño base */
   text-align: center;
 }
 
@@ -126,11 +128,25 @@ button.primary:hover {
 }
 
 button.secondary {
-  background: transparent;
-  border: 1px solid #999;
-  padding: 8px 10px;
+  background: var(--duo-light); /* Fondo verde claro */
+  border: 1px solid var(--duo-green); /* Borde verde */
+  padding: 10px 12px;
   border-radius: 8px;
   cursor: pointer;
+  color: var(--duo-dark); /* Texto verde oscuro */
+  font-weight: 700;
+  transition: background 0.3s, transform 0.2s;
+  margin-top: 16px; /* Agrega espacio entre el botón y los logros */
+}
+
+button.secondary:hover {
+  background: var(--duo-green); /* Fondo verde oscuro */
+  color: var(--text-light); /* Texto blanco */
+  transform: scale(1.05); /* Efecto de zoom */
+}
+
+button.secondary:active {
+  transform: scale(0.95); /* Efecto de clic */
 }
 
 .profile-card {
@@ -157,7 +173,8 @@ button.secondary {
   color: white;
   border-radius: 16px;
   padding: 20px 24px;
-  box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+  flex-wrap: wrap; /* Permite que los elementos se ajusten */
 }
 
 .content-hero-right {
@@ -415,7 +432,7 @@ button.secondary {
 
 .lessons-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); /* Ajuste para pantallas pequeñas */
   gap: 12px;
 }
 
@@ -428,7 +445,7 @@ button.secondary {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: transform 0.2s;
+  transition: transform 0.2s ease-in-out;
   opacity: 0;
   transform: translateY(8px);
   animation: lessonIn 0.4s ease forwards;
@@ -615,26 +632,282 @@ button.danger:hover {
 }
 
 .profile-stats {
-  margin-top: 12px;
+  margin-top: 16px;
   display: grid;
-  gap: 4px;
+  gap: 8px; /* Aumenta el espacio entre los elementos */
 }
 
 .profile-achievements {
-  margin-top: 12px;
+  margin-top: 20px; /* Aumenta el espacio entre las estadísticas y los logros */
   display: grid;
-  gap: 6px;
+  gap: 12px; /* Aumenta el espacio entre los logros */
 }
 
 .profile-achievements-list {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .profile-achievement-item {
-  padding: 6px 10px;
-  background: #f7fff3;
-  border: 1px solid #cfe7c8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: pop-in 0.5s ease-in-out;
+  gap: 4px;
+}
+
+.profile-achievement-item img {
+  width: 64px;
+  height: 64px;
+}
+
+.home {
+  text-align: center;
+  padding: 20px;
+  background: linear-gradient(180deg, #9de37a, #58cc02);
+  color: black;
+}
+
+.home h1 {
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+}
+
+.home button {
+  background: white;
+  color: #58cc02;
+  padding: 10px 20px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.home button:hover {
+  transform: scale(1.05);
+}
+
+/* Media Queries */
+@media (min-width: 768px) {
+  .container {
+    max-width: 90%;
+    padding: 16px;
+  }
+
+  .hero {
+    padding: 24px;
+    font-size: 1.2rem;
+  }
+
+  .lessons-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  .duo-header {
+    flex-direction: row;
+    gap: 12px;
+  }
+
+  html {
+    font-size: 17px;
+  }
+
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 980px;
+  }
+
+  html {
+    font-size: 18px;
+  }
+
+  .hero {
+    padding: 32px;
+    font-size: 1.5rem;
+  }
+
+  .lessons-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+}
+
+button {
+  font-size: 1.2rem;
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+button:hover {
+  box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
+}
+
+button:active {
+  transform: scale(0.95);
+}
+
+.lesson-card:hover {
+  transform: scale(1.05);
+}
+
+.lesson-card:active {
+  transform: scale(0.95);
+}
+
+.welcome-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  text-align: center;
+  background: linear-gradient(135deg, #4caf50, #81c784);
+  color: white;
+}
+
+.welcome-screen h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.welcome-screen p {
+  font-size: 1.2rem;
+  margin-bottom: 2rem;
+}
+
+.fade-enter {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.fade-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fade-exit-active {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.unit-stack {
+  display: grid;
+  gap: 16px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.unit-card {
+  background: #e9ffe4;
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.06);
+}
+
+.unit-card-btn {
+  width: 100%;
+  text-align: left;
+  background: #58cc02;
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.unit-card-btn.active {
+  background: #45a700;
+}
+
+.lesson-circles {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.lesson-circle {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid #c7eeb9;
+  background: #f0fff0;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.lesson-circle.unlocked {
+  background: #58cc02;
+  color: white;
+}
+
+.lesson-circle.locked {
+  background: #dcdcdc;
+  color: #7a7a7a;
+  cursor: not-allowed;
+}
+
+.exercise-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.exercise-progress {
+  flex: 1;
+  height: 10px;
+  background: #e6efe6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.exercise-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #8fe14b, #58cc02);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.exercise-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.lesson-lives-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }

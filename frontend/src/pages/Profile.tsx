@@ -49,6 +49,7 @@ export default function Profile() {
           <div className="profile-stats">
             <div><strong>XP:</strong> {xp}</div>
             <div><strong>Streak:</strong> {streak} days</div>
+            <div><strong>Lessons Completed:</strong> {achievements.length}</div>
           </div>
 
           <div className="profile-achievements">
@@ -59,12 +60,13 @@ export default function Profile() {
               <div className="profile-achievements-list">
                 {achievements.map(a => (
                   <div key={a.id} className="profile-achievement-item">
-                    {a.achievementType}
+                    <img src={`/assets/medals/${a.type}.png`} alt={a.type} />
+                    <span>{a.name}</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
+        </div>
         </div>
       ) : <div>Loading...</div>}
       <button onClick={async () => { await logout() }} className="secondary">Logout</button>

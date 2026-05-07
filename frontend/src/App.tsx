@@ -1,10 +1,12 @@
 import React from 'react'
 import { Routes, Route, Link, useNavigate } from 'react-router-dom'
+import Home from './pages/Home';
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Profile from './pages/Profile'
 import { AuthProvider, useAuth } from './state/auth'
 import Content from './pages/Content'
+import LessonExercises from './pages/LessonExercises'
 
 function Header() {
   const { user, accessToken, logout } = useAuth()
@@ -34,11 +36,12 @@ export default function App() {
         <Header />
         <main>
           <Routes>
-            <Route path="/" element={<div className="hero card">Welcome to Mini Duolingo — try login or register.</div>} />
+            <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/content" element={<Content />} />
+            <Route path="/lesson/:lessonId" element={<LessonExercises />} />
           </Routes>
         </main>
       </div>
