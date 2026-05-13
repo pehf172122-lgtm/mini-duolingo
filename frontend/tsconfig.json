@@ -2,7 +2,14 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["DOM", "ES2020"],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ES2020"
+    ],
+    "types": [
+      "vite/client"
+    ],
     "skipLibCheck": true,
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": true,
@@ -14,5 +21,7 @@
     "jsx": "react-jsx",
     "strict": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }

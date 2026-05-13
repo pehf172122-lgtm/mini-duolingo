@@ -7,18 +7,23 @@ export default function Home() {
   const { accessToken } = useAuth()
 
   const handleGetStarted = () => {
-    if (accessToken) {
-      navigate('/content') // Redirige a la página de contenido si el usuario está autenticado
-    } else {
-      navigate('/register') // Redirige a la página de registro si no está autenticado
-    }
+    navigate(accessToken ? '/content' : '/register')
   }
 
   return (
     <div className="welcome-screen">
-      <h1>Welcome to Your Language Journey!</h1>
-      <p>Start learning and have fun while improving your skills.</p>
-      <button className="primary" onClick={handleGetStarted}>Get Started</button>
+      <div className="welcome-owl">🦉</div>
+      <h1>¡Aprende un idioma gratis!</h1>
+      <p>Lecciones cortas, divertidas y efectivas. Empieza en menos de un minuto.</p>
+      <button className="primary" onClick={handleGetStarted}>Comenzar ahora</button>
+      {!accessToken && (
+        <p className="welcome-login-hint">
+          ¿Ya tienes cuenta?{' '}
+          <span className="welcome-login-link" onClick={() => navigate('/login')}>
+            Inicia sesión
+          </span>
+        </p>
+      )}
     </div>
   )
 }

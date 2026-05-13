@@ -1,364 +1,299 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/auth'
+import { useToast } from '../components/Toast'
 import * as contentApi from '../services/content'
 import * as pronunciationApi from '../services/pronunciation'
-import Confetti from 'react-confetti'
+import LessonSummary from '../components/LessonSummary'
 
 export default function LessonExercises() {
   const { accessToken } = useAuth()
   const { lessonId } = useParams()
   const nav = useNavigate()
   const location = useLocation()
+  const toast = useToast()
   const lessonTitle = (location.state as any)?.lessonTitle
 
-  const [exercises, setExercises] = useState<any[]>([])
-  const [loadingExercises, setLoadingExercises] = useState(false)
+  const [exercises, setExercises]             = useState<any[]>([])
+  const [loading, setLoading]                 = useState(false)
   const [exerciseAnswers, setExerciseAnswers] = useState<Record<string, string>>({})
   const [exerciseResults, setExerciseResults] = useState<Record<string, any>>({})
-  const [audioResults, setAudioResults] = useState<Record<string, any>>({})
-  const [lessonLives, setLessonLives] = useState<number | null>(null)
+  const [audioResults, setAudioResults]       = useState<Record<string, any>>({})
+  const [lessonLives, setLessonLives]         = useState<number | null>(null)
   const [nextLifeSeconds, setNextLifeSeconds] = useState(0)
-  const [msg, setMsg] = useState('')
-  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0)
-  const [showConfetti, setShowConfetti] = useState(false)
+  const [currentIdx, setCurrentIdx]           = useState(0)
+  const [checking, setChecking]               = useState(false)
+  const [showSummary, setShowSummary]         = useState(false)
 
-  const [recordingExerciseId, setRecordingExerciseId] = useState<string | null>(null)
-  const [recordedAudio, setRecordedAudio] = useState<Record<string, { blob: Blob; url: string }>>({})
+  const [recordingId, setRecordingId]         = useState<string | null>(null)
+  const [recordedAudio, setRecordedAudio]     = useState<Record<string, { blob: Blob; url: string }>>({})
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
-  const audioChunksRef = React.useRef<Blob[]>([])
+  const audioChunksRef   = React.useRef<Blob[]>([])
 
-  const totalExercises = exercises.length
+  const total         = exercises.length
+  const correctCount  = exercises.filter(ex => exerciseResults[ex.id]?.correct).length
   const answeredCount = exercises.filter(ex => exerciseResults[ex.id]).length
-  const progressPercent = totalExercises ? Math.round((answeredCount / totalExercises) * 100) : 0
-  const currentExercise = exercises[currentExerciseIndex]
+  const progress      = total ? (answeredCount / total) * 100 : 0
+  const current       = exercises[currentIdx]
+  const currentResult = current ? exerciseResults[current.id] : null
+  const isAnswered    = !!currentResult
+  const isCorrect     = currentResult?.correct
+  const isLast        = currentIdx === total - 1
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0')
-    const s = Math.floor(seconds % 60).toString().padStart(2, '0')
-    return `${m}:${s}`
-  }
+  const fmt = (s: number) =>
+    `${Math.floor(s / 60).toString().padStart(2,'0')}:${Math.floor(s % 60).toString().padStart(2,'0')}`
 
+  /* ── Timer ───────────────────────────────────── */
   useEffect(() => {
     if (nextLifeSeconds <= 0) return
-    const id = setInterval(() => {
-      setNextLifeSeconds(prev => (prev > 0 ? prev - 1 : 0))
-    }, 1000)
+    const id = setInterval(() => setNextLifeSeconds(p => p > 0 ? p - 1 : 0), 1000)
     return () => clearInterval(id)
   }, [nextLifeSeconds])
 
+  /* ── Load ────────────────────────────────────── */
   useEffect(() => {
-    const load = async () => {
-      if (!accessToken || !lessonId) return
-      setLoadingExercises(true)
-      setMsg('')
-      try {
-        const data = await contentApi.getExercisesByLesson(accessToken, lessonId)
-        setExercises(data || [])
-        setCurrentExerciseIndex(0)
-        const livesData = await contentApi.getLessonLives(accessToken, lessonId)
-        if (typeof livesData?.lives === 'number') {
-          setLessonLives(livesData.lives)
-        }
-        if (typeof livesData?.nextLifeInSeconds === 'number') {
-          setNextLifeSeconds(livesData.nextLifeInSeconds)
-        }
-      } catch (err: any) {
-        setMsg(err?.message || 'Failed to load exercises')
-      } finally {
-        setLoadingExercises(false)
-      }
-    }
-    load()
+    if (!accessToken || !lessonId) return
+    setLoading(true)
+    Promise.all([
+      contentApi.getExercisesByLesson(accessToken, lessonId),
+      contentApi.getLessonLives(accessToken, lessonId),
+    ])
+      .then(([exData, livesData]) => {
+        setExercises(exData || [])
+        if (typeof livesData?.lives === 'number') setLessonLives(livesData.lives)
+        if (typeof livesData?.nextLifeInSeconds === 'number') setNextLifeSeconds(livesData.nextLifeInSeconds)
+      })
+      .catch(err => toast.error(err?.message || 'Error al cargar ejercicios'))
+      .finally(() => setLoading(false))
   }, [accessToken, lessonId])
 
-  const handleExitLesson = () => {
-    nav('/content')
+  /* ── Validate ────────────────────────────────── */
+  const handleCheck = async () => {
+    if (!accessToken || !current || checking) return
+    const answer = exerciseAnswers[current.id] || ''
+    if (!answer.trim()) { toast.info('Escribe tu respuesta antes de verificar.'); return }
+    setChecking(true)
+    try {
+      const result = await contentApi.validateExercise(accessToken, current.id, answer)
+      setExerciseResults(prev => ({ ...prev, [current.id]: result }))
+      if (typeof result?.lives === 'number') setLessonLives(result.lives)
+      if (result.correct) toast.success('¡Correcto! +10 XP')
+      else toast.error('Incorrecto. ¡Inténtalo de nuevo!')
+      const livesData = await contentApi.getLessonLives(accessToken, lessonId!)
+      if (typeof livesData?.nextLifeInSeconds === 'number') setNextLifeSeconds(livesData.nextLifeInSeconds)
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al verificar')
+    } finally {
+      setChecking(false)
+    }
   }
 
-  const handleFinishLesson = () => {
-    setShowConfetti(true)
-    setTimeout(() => {
-      nav('/content', { state: { showConfetti: true } })
-    }, 900)
-  }
-
-  const setAnswer = (exerciseId: string, value: string) => {
-    setExerciseAnswers(prev => ({ ...prev, [exerciseId]: value }))
-  }
-
-  const handleValidate = async (exercise: any) => {
-    if (!accessToken) return
-    const answer = exerciseAnswers[exercise.id] || ''
-    if (!answer) {
-      setMsg('Please enter an answer before validating.')
+  /* ── Recording ───────────────────────────────── */
+  const startRecording = async (exerciseId: string) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error('Tu navegador no soporta grabación de audio.')
       return
     }
-    setMsg('')
     try {
-      const result = await contentApi.validateExercise(accessToken, exercise.id, answer)
-      setExerciseResults(prev => ({ ...prev, [exercise.id]: result }))
-      if (typeof result?.lives === 'number') {
-        setLessonLives(result.lives)
-      }
-      if (lessonId) {
-        const livesData = await contentApi.getLessonLives(accessToken, lessonId)
-        if (typeof livesData?.nextLifeInSeconds === 'number') {
-          setNextLifeSeconds(livesData.nextLifeInSeconds)
-        }
-      }
-    } catch (err: any) {
-      setMsg(err?.message || 'Validation failed')
-    }
-  }
-
-  const startRecording = async (exerciseId: string) => {
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setMsg('Your browser does not support audio recording.')
-        return
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioChunksRef.current = []
       const recorder = new MediaRecorder(stream)
       mediaRecorderRef.current = recorder
-
-      recorder.ondataavailable = e => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data)
-      }
-
+      recorder.ondataavailable = e => { if (e.data?.size > 0) audioChunksRef.current.push(e.data) }
       recorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-        const url = URL.createObjectURL(blob)
-        setRecordedAudio(prev => ({ ...prev, [exerciseId]: { blob, url } }))
+        setRecordedAudio(prev => ({ ...prev, [exerciseId]: { blob, url: URL.createObjectURL(blob) } }))
         stream.getTracks().forEach(t => t.stop())
       }
-
       recorder.start()
-      setRecordingExerciseId(exerciseId)
-      setMsg('')
-    } catch (err) {
-      setMsg('Microphone permission denied or unavailable.')
-    }
+      setRecordingId(exerciseId)
+    } catch { toast.error('Permiso de micrófono denegado.') }
   }
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && recordingExerciseId) {
-      mediaRecorderRef.current.stop()
-      setRecordingExerciseId(null)
-    }
-  }
+  const stopRecording = () => { mediaRecorderRef.current?.stop(); setRecordingId(null) }
 
   const sendRecording = async (exercise: any) => {
     if (!accessToken) return
     const rec = recordedAudio[exercise.id]
-    if (!rec) {
-      setMsg('No recording found for this exercise.')
-      return
-    }
-
-    const file = new File([rec.blob], `recording-${exercise.id}.webm`, { type: rec.blob.type || 'audio/webm' })
-
+    if (!rec) { toast.info('No hay grabación para este ejercicio.'); return }
     try {
+      const file = new File([rec.blob], `rec-${exercise.id}.webm`, { type: 'audio/webm' })
       const result = await pronunciationApi.evaluateAudio(accessToken, {
         word: exercise.correct_answer,
         expectedText: exercise.correct_answer,
-        audio: file
+        audio: file,
       })
       setAudioResults(prev => ({ ...prev, [exercise.id]: result }))
-    } catch (err: any) {
-      setMsg(err?.message || 'Audio evaluation failed')
-    }
+      toast.success(`Puntuación de pronunciación: ${result.score}`)
+    } catch (err: any) { toast.error(err?.message || 'Error al evaluar audio') }
   }
 
-  if (!accessToken) return <div className="card">Please login to view content.</div>
-  if (!lessonId) return <div className="card">Missing lesson id.</div>
+  /* ── Finish ──────────────────────────────────── */
+  const handleFinish = () => setShowSummary(true)
+
+  if (!accessToken || !lessonId) return null
+
+  /* ── Summary screen ──────────────────────────── */
+  if (showSummary) {
+    return (
+      <LessonSummary
+        totalExercises={total}
+        correctCount={correctCount}
+        xpEarned={correctCount * 10}
+      />
+    )
+  }
 
   return (
-    <div className="content-page">
-      {showConfetti && <Confetti />}
-      <section className="content-card">
-        <div className="exercise-header">
-          <button className="secondary" onClick={handleExitLesson}>Salir</button>
-          <div className="exercise-progress">
-            <div className="exercise-progress-bar" style={{ width: `${progressPercent}%` }} />
-          </div>
-          <div className="lesson-lives-wrap">
-            {typeof lessonLives === 'number' && (
-              <div className="lesson-lives">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <span key={i} className={i < lessonLives ? 'heart full' : 'heart empty'}>
-                    {i < lessonLives ? '❤️' : '🤍'}
-                  </span>
-                ))}
-              </div>
-            )}
-            {nextLifeSeconds > 0 && (
-              <div className="lesson-lives-timer">
-                Next life in {formatTime(nextLifeSeconds)}
-              </div>
-            )}
+    <div className="lesson-page">
+      {/* Top bar */}
+      <div className="lesson-topbar">
+        <button className="lesson-exit-btn" onClick={() => nav('/content')} title="Salir">✕</button>
+        <div className="lesson-progress-wrap">
+          <div className="lesson-progress-bar-outer">
+            <div className="lesson-progress-bar-inner" style={{ width: `${progress}%` }} />
           </div>
         </div>
+        {typeof lessonLives === 'number' && (
+          <div className="lesson-lives-wrap">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <span key={i} className={i < lessonLives ? 'heart' : 'heart empty'}>
+                {i < lessonLives ? '❤️' : '🤍'}
+              </span>
+            ))}
+            {nextLifeSeconds > 0 && (
+              <span className="lesson-lives-timer">{fmt(nextLifeSeconds)}</span>
+            )}
+          </div>
+        )}
+      </div>
 
-        <h3>{lessonTitle || 'Lesson'}</h3>
+      {/* Body */}
+      <div className="lesson-body">
+        {loading && <div className="lesson-loading">Cargando ejercicios...</div>}
 
-        {loadingExercises && <div className="section-meta">Loading...</div>}
-        {!loadingExercises && !currentExercise && (
-          <div className="empty-state">No exercises found for this lesson.</div>
+        {!loading && !current && (
+          <div className="lesson-empty">No hay ejercicios para esta lección.</div>
         )}
 
-        {currentExercise && (
-          <div className="exercise-card">
-            <div className="exercise-meta">
-              <span className="exercise-type">{currentExercise.type}</span>
-            </div>
-            <div className="exercise-prompt">{currentExercise.prompt}</div>
+        {current && (
+          <>
+            <div className="lesson-exercise-type">{current.type}</div>
+            <h2 className="lesson-prompt">{current.prompt}</h2>
 
-            <input
-              className="exercise-input"
-              placeholder="Type your answer"
-              value={exerciseAnswers[currentExercise.id] || ''}
-              onChange={e => setAnswer(currentExercise.id, e.target.value)}
-            />
+            {current.type !== 'PRONUNCIATION' && (
+              <input
+                className="lesson-input"
+                placeholder="Escribe tu respuesta..."
+                value={exerciseAnswers[current.id] || ''}
+                onChange={e => {
+                  if (isAnswered) return
+                  setExerciseAnswers(prev => ({ ...prev, [current.id]: e.target.value }))
+                }}
+                onKeyDown={e => { if (e.key === 'Enter' && !isAnswered) handleCheck() }}
+                disabled={isAnswered}
+                autoFocus
+              />
+            )}
 
-            {currentExercise.type === 'PRONUNCIATION' && (
-              <div className="exercise-audio">
+            {current.type === 'PRONUNCIATION' && (
+              <div className="lesson-audio-wrap">
                 <button
-                  type="button"
-                  className={recordingExerciseId === currentExercise.id ? 'danger' : 'secondary'}
-                  onClick={() => recordingExerciseId === currentExercise.id ? stopRecording() : startRecording(currentExercise.id)}
+                  className={recordingId === current.id ? 'lesson-btn-record recording' : 'lesson-btn-record'}
+                  onClick={() => recordingId === current.id ? stopRecording() : startRecording(current.id)}
                 >
-                  {recordingExerciseId === currentExercise.id ? 'Stop Recording' : 'Record'}
+                  {recordingId === current.id ? (
+                    <><div className="recording-wave"><span/><span/><span/><span/></div>Detener</>
+                  ) : '🎙️ Grabar'}
                 </button>
-
-                {recordingExerciseId === currentExercise.id && (
-                  <div className="recording-wave">
-                    <span />
-                    <span />
-                    <span />
-                    <span />
+                {recordedAudio[current.id] && (
+                  <div className="lesson-audio-controls">
+                    <audio controls src={recordedAudio[current.id].url} />
+                    <button className="lesson-btn-send" onClick={() => sendRecording(current)}>
+                      Enviar grabación
+                    </button>
                   </div>
                 )}
-
-                {recordedAudio[currentExercise.id] && (
-                  <>
-                    <audio controls src={recordedAudio[currentExercise.id].url} />
-                    <button type="button" className="primary" onClick={() => sendRecording(currentExercise)}>
-                      Send Recording
-                    </button>
-                  </>
+                {audioResults[current.id] && (
+                  <div className="lesson-audio-result">
+                    <span className="result-detail">Puntuación: {audioResults[current.id].score}</span>
+                    {audioResults[current.id].feedback && (
+                      <p className="feedback-detail">{audioResults[current.id].feedback}</p>
+                    )}
+                  </div>
                 )}
               </div>
             )}
 
-            <div className="exercise-actions">
-              <button
-                type="button"
-                className="primary"
-                onClick={() => handleValidate(currentExercise)}
-              >
-                Check Answer
-              </button>
-            </div>
-
-            {exerciseResults[currentExercise.id] && (
-              <div className="exercise-result">
-                <span className={exerciseResults[currentExercise.id].correct ? 'result-good' : 'result-bad'}>
-                  {exerciseResults[currentExercise.id].correct ? 'Correct' : 'Incorrect'}
-                </span>
-                {typeof exerciseResults[currentExercise.id].lives === 'number' && (
-                  <div className="lives-row">
-                    <span className="lives-label">Lives:</span>
-                    <span className="lives-hearts">
-                      {Array.from({ length: 3 }).map((_, i) => (
-                        <span key={i} className={i < exerciseResults[currentExercise.id].lives ? 'heart full' : 'heart empty'}>
-                          {i < exerciseResults[currentExercise.id].lives ? '❤️' : '🤍'}
-                        </span>
-                      ))}
-                    </span>
-                  </div>
-                )}
-                {exerciseResults[currentExercise.id].score !== undefined && (
-                  <span className="result-detail">Score: {exerciseResults[currentExercise.id].score}</span>
-                )}
-                {exerciseResults[currentExercise.id].feedback && (
-                  <div className="result-feedback">{exerciseResults[currentExercise.id].feedback}</div>
-                )}
-                {exerciseResults[currentExercise.id]?.vocabInfo && (
-                  <div className="vocab-info">
-                    {exerciseResults[currentExercise.id].vocabInfo.ipa && (
-                      <div className="vocab-ipa">IPA: {exerciseResults[currentExercise.id].vocabInfo.ipa}</div>
-                    )}
-
-                    {Array.isArray(exerciseResults[currentExercise.id].vocabInfo.meanings) && (
-                      <div className="vocab-meanings">
-                        {exerciseResults[currentExercise.id].vocabInfo.meanings.map((m: any) => (
-                          <div key={m.id} className="vocab-meaning">
-                            <div className="vocab-meaning-text">{m.meaning}</div>
-                            {Array.isArray(m.examples) && m.examples.length > 0 && (
+            {/* Feedback banner */}
+            {isAnswered && (
+              <div className={`lesson-feedback ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}`}>
+                <div className="feedback-icon">{isCorrect ? '✅' : '❌'}</div>
+                <div className="feedback-body">
+                  <p className="feedback-title">{isCorrect ? '¡Correcto!' : 'Respuesta incorrecta'}</p>
+                  {currentResult?.feedback && <p className="feedback-detail">{currentResult.feedback}</p>}
+                  {currentResult?.vocabInfo && (
+                    <div className="vocab-info">
+                      {currentResult.vocabInfo.ipa && <span className="vocab-ipa">IPA: {currentResult.vocabInfo.ipa}</span>}
+                      {Array.isArray(currentResult.vocabInfo.meanings) &&
+                        currentResult.vocabInfo.meanings.map((m: any) => (
+                          <div key={m.id}>
+                            <p className="vocab-meaning-text">{m.meaning}</p>
+                            {m.examples?.length > 0 && (
                               <ul className="vocab-examples">
-                                {m.examples.map((ex: any) => (
-                                  <li key={ex.id}>{ex.example_text}</li>
-                                ))}
+                                {m.examples.map((ex: any) => <li key={ex.id}>{ex.example_text}</li>)}
                               </ul>
                             )}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {exerciseResults[currentExercise.id].repeat && (
-                  <div className="repeat-note">
-                    Reintento: no suma XP ni afecta vidas.
-                  </div>
-                )}
+                        ))
+                      }
+                    </div>
+                  )}
+                  {currentResult?.repeat && <p className="repeat-note">Reintento — no afecta XP ni vidas.</p>}
+                  {typeof currentResult?.lives === 'number' && (
+                    <div className="lives-row" style={{ marginTop: 8 }}>
+                      <span className="lives-label">Vidas:</span>
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <span key={i} className={i < currentResult.lives ? 'heart' : 'heart empty'}>
+                          {i < currentResult.lives ? '❤️' : '🤍'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
-
-            {audioResults[currentExercise.id] && (
-              <div className="exercise-result">
-                <span className="result-detail">Audio score: {audioResults[currentExercise.id].score}</span>
-                {audioResults[currentExercise.id].feedback && (
-                  <div className="result-feedback">{audioResults[currentExercise.id].feedback}</div>
-                )}
-              </div>
-            )}
-          </div>
+          </>
         )}
+      </div>
 
-        <div className="exercise-nav">
-          {currentExerciseIndex > 0 && (
-            <button className="secondary" onClick={() => setCurrentExerciseIndex(i => i - 1)}>
+      {/* Footer */}
+      {current && (
+        <div className={`lesson-footer ${isAnswered ? (isCorrect ? 'footer-correct' : 'footer-wrong') : ''}`}>
+          {currentIdx > 0 && !isAnswered && (
+            <button className="lesson-btn-skip" onClick={() => setCurrentIdx(i => i - 1)}>
               Anterior
             </button>
           )}
-
-          {currentExerciseIndex < totalExercises - 1 && (
+          {!isAnswered ? (
             <button
-              className="primary"
-              disabled={!exerciseResults[currentExercise?.id]}
-              onClick={() => setCurrentExerciseIndex(i => i + 1)}
+              className="lesson-btn-check"
+              onClick={handleCheck}
+              disabled={checking || !exerciseAnswers[current.id]?.trim()}
             >
-              Siguiente
+              {checking ? 'Verificando...' : 'VERIFICAR'}
             </button>
-          )}
-
-          {currentExerciseIndex === totalExercises - 1 && (
-            <button
-              className="primary"
-              disabled={!exerciseResults[currentExercise?.id]}
-              onClick={handleFinishLesson}
-            >
-              Finalizar
+          ) : isLast ? (
+            <button className="lesson-btn-check" onClick={handleFinish}>
+              VER RESULTADO
+            </button>
+          ) : (
+            <button className="lesson-btn-check" onClick={() => setCurrentIdx(i => i + 1)}>
+              SIGUIENTE
             </button>
           )}
         </div>
-
-        <div className="msg">{msg}</div>
-      </section>
+      )}
     </div>
   )
 }

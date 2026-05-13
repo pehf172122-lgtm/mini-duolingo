@@ -1,137 +1,145 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../state/auth'
+import { useToast } from '../components/Toast'
 import * as contentApi from '../services/content'
 import Confetti from 'react-confetti'
+
+type Lesson = {
+  lessonId: string
+  title: string
+  status: 'locked' | 'available' | 'completed'
+}
 
 type UnitWithLessons = {
   unitId: string
   title: string
-  lessons: any[]
+  lessons: Lesson[]
+}
+
+const NODE_ICONS = ['⭐', '📖', '⭐', '🏆', '⭐', '📖', '⭐', '🎯']
+
+function nodeClass(status: string) {
+  if (status === 'completed') return 'node-btn node-done'
+  if (status === 'available') return 'node-btn node-active'
+  return 'node-btn node-locked'
+}
+
+function nodeIcon(lesson: Lesson, idx: number) {
+  if (lesson.status === 'locked') return '🔒'
+  return NODE_ICONS[idx % NODE_ICONS.length]
 }
 
 export default function Content() {
   const { accessToken } = useAuth()
   const nav = useNavigate()
   const location = useLocation()
-  const [units, setUnits] = useState<UnitWithLessons[]>([])
-  const [lessons, setLessons] = useState<any[]>([])
-  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null)
-  const [msg, setMsg] = useState('')
-  const [animateLessons, setAnimateLessons] = useState(false)
-  const [loadingUnits, setLoadingUnits] = useState(false)
+  const toast = useToast()
+
+  const [units, setUnits]       = useState<UnitWithLessons[]>([])
+  const [loading, setLoading]   = useState(false)
   const [showConfetti, setShowConfetti] = useState(false)
 
-
   useEffect(() => {
-    const showFromRoute = (location.state as any)?.showConfetti
-    if (!showFromRoute) return
+    const fromRoute = (location.state as any)?.showConfetti
+    if (!fromRoute) return
     setShowConfetti(true)
     const id = setTimeout(() => setShowConfetti(false), 3000)
     nav(location.pathname, { replace: true, state: null })
     return () => clearTimeout(id)
-  }, [location.state, nav, location.pathname])
-
-  const refreshUnits = async (keepSelection = true) => {
-    if (!accessToken) return
-    setLoadingUnits(true)
-    try {
-      const data = await contentApi.getUnitsWithProgress(accessToken)
-      const list = data?.units || []
-      setUnits(list)
-      if (keepSelection && selectedUnitId) {
-        const unit = list.find((u: UnitWithLessons) => u.unitId === selectedUnitId)
-        setLessons(unit?.lessons || [])
-      }
-    } catch {
-      setMsg('Failed to load units')
-    } finally {
-      setLoadingUnits(false)
-    }
-  }
+  }, [location.state])
 
   useEffect(() => {
     if (!accessToken) return
-    refreshUnits(false)
+    setLoading(true)
+    contentApi.getUnitsWithProgress(accessToken)
+      .then(data => setUnits(data?.units || []))
+      .catch(err => toast.error(err?.message || 'Error al cargar el contenido'))
+      .finally(() => setLoading(false))
   }, [accessToken])
 
-  const loadLessons = async (unitId: string) => {
-    if (!accessToken) return
-    setSelectedUnitId(unitId)
-    setMsg('')
-    setAnimateLessons(false)
-
-    const unit = units.find(u => u.unitId === unitId)
-    if (unit) {
-      setLessons(unit.lessons || [])
-      setTimeout(() => setAnimateLessons(true), 0)
-      return
-    }
-
-    await refreshUnits(true)
-    setTimeout(() => setAnimateLessons(true), 0)
-  }
-
-  const openLesson = (lesson: any) => {
+  const openLesson = (lesson: Lesson) => {
     if (lesson.status === 'locked') {
-      setMsg('Lesson locked. Complete the previous lesson to unlock it.')
+      toast.info('Completa la lección anterior para desbloquear esta.')
       return
     }
     nav(`/lesson/${lesson.lessonId}`, { state: { lessonTitle: lesson.title } })
   }
-  
-  if (!accessToken) return <div className="card">Please login to view content.</div>
+
+  if (!accessToken) return null
 
   return (
-    <div className="content-page">
-      {showConfetti && <Confetti />}
-      <div className="content-hero">
-        <div className="content-hero-text">
-          <h2>Your Path</h2>
-          <p>Pick a unit and complete lessons to unlock the next ones.</p>
-        </div>
-        <div className="content-hero-right">
+    <div>
+      {showConfetti && <Confetti recycle={false} numberOfPieces={150} />}
 
-          <div className="content-hero-badge">XP +10</div>
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
+          🦉 Cargando tu ruta de aprendizaje...
         </div>
-      </div>
+      )}
 
-      <section className="content-card">
-        <div className="section-header">
-          <h3>Units</h3>
-          {loadingUnits && <span className="section-meta">Loading...</span>}
+      {!loading && units.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
+          No hay unidades disponibles todavía.
         </div>
-          <div className="unit-stack">
-            {units.map(u => (
-              <div key={u.unitId} className="unit-card">
-                <button
-                 className={`unit-card-btn ${selectedUnitId === u.unitId ? 'active' : ''}`}
-                 onClick={() => loadLessons(u.unitId)}
-                >
-                  {u.title}
-                </button>
+      )}
 
-                {selectedUnitId === u.unitId && (
-                  <div className="lesson-circles">
-                    {lessons.map((l: any) => {
-                      const locked = l.status === 'locked'
-                      return (
-                        <button
-                          key={l.lessonId}
-                          className={`lesson-circle ${locked ? 'locked' : 'unlocked'}`}
-                          onClick={() => !locked && openLesson(l)}
-                        >
-                          {locked ? '🔒' : '⭐'}
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
+      {units.map((unit, uIdx) => (
+        <div key={unit.unitId} className="content-page" style={{ marginBottom: 48 }}>
+
+          {/* Section banner */}
+          <div className="section-banner">
+            <div className="section-banner-left">
+              <span className="section-banner-back">← ETAPA {uIdx + 1}, SECCIÓN 1</span>
+              <span className="section-banner-title">{unit.title}</span>
+            </div>
+            <button className="section-banner-guide">📋 GUÍA</button>
           </div>
-          <div className="msg">{msg}</div>
-        </section>
+
+          {/* Lesson path */}
+          <div className="lesson-path">
+            {unit.lessons.map((lesson, lIdx) => {
+              const isActive = lesson.status === 'available'
+              const isDone   = lesson.status === 'completed'
+
+              return (
+                <React.Fragment key={lesson.lessonId}>
+                  {lIdx > 0 && (
+                    <div className={`path-connector ${isDone ? 'done' : ''}`} />
+                  )}
+
+                  <div className="path-node">
+                    {/* Owl mascot floats to the right of the active node */}
+                    {isActive && (
+                      <div className="path-owl-wrap">
+                        <img
+                          src="/Imagen2.png"
+                          alt="Duo"
+                          className="path-owl"
+                        />
+                      </div>
+                    )}
+
+                    <div className="path-node-bubble">
+                      {isActive && <span className="bubble-label">EMPEZAR</span>}
+                      {lesson.status === 'locked' && (
+                        <span className="bubble-label locked-label">BLOQUEADO</span>
+                      )}
+                      <button
+                        className={nodeClass(lesson.status)}
+                        onClick={() => openLesson(lesson)}
+                        title={lesson.title}
+                      >
+                        {nodeIcon(lesson, lIdx)}
+                      </button>
+                    </div>
+                  </div>
+                </React.Fragment>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
